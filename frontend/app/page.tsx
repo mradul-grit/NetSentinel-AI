@@ -14,6 +14,7 @@ import { clearFault, getTelemetry, injectFault } from "@/lib/api";
 import { CopilotPanel } from "@/components/CopilotPanel";
 import { ControlPanel } from "@/components/ControlPanel";
 import { MetricCard } from "@/components/MetricCard";
+import { NetworkTopology } from "@/components/NetworkTopology";
 import { TelemetryChart } from "@/components/TelemetryChart";
 import type {
   CopilotAssessment,
@@ -265,6 +266,8 @@ export default function Home() {
               onInjectFault={handleInjectFault}
               onClearFault={handleClearFault}
             />
+
+            <NetworkTopology telemetry={latest} />
 
             <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <TelemetryChart
