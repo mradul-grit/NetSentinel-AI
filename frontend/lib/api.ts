@@ -1,4 +1,4 @@
-import type { Telemetry } from "@/types/telemetry";
+import type { CopilotAnalysis, RiskLevel, Telemetry, TelemetryPoint } from "@/types/telemetry";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -22,6 +22,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getTelemetry() {
   return request<Telemetry>("/telemetry");
+}
+
+export function getCopilotAnalysis({
+  telemetry,
+  riskScore,
+  severity,
+  faultActive,
+}: {
+  telemetry: TelemetryPoint;
+  riskScore: number;
+  severity: RiskLevel;
+  faultActive: boolean;
+}) {
+  const params = new URLSearchParams({
+    latency: telemetry.latency.toFixed(1),
+    packet_loss: telemetry.packet_loss.toFixed(2),
+    cpu: telemetry.cpu.toFixed(1),
+    bandwidth: telemetry.bandwidth.toFixed(1),
+    risk_score: riskScore.toFixed(0),
+    severity,
+    fault_active: String(faultActive),
+  });
+
+  return request<CopilotAnalysis>(`/copilot-analysis?${params.toString()}`);
 }
 
 export function injectFault() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   Cpu,
@@ -10,20 +10,22 @@ import {
   Router,
   SignalHigh,
 } from "lucide-react";
-import { clearFault, getTelemetry, injectFault } from "@/lib/api";
+import { clearFault, getCopilotAnalysis, getTelemetry, injectFault } from "@/lib/api";
 import { CopilotPanel } from "@/components/CopilotPanel";
 import { ControlPanel } from "@/components/ControlPanel";
 import { MetricCard } from "@/components/MetricCard";
 import { NetworkTopology } from "@/components/NetworkTopology";
 import { TelemetryChart } from "@/components/TelemetryChart";
 import type {
-  CopilotAssessment,
+  CopilotAnalysis,
   RiskLevel,
   Telemetry,
   TelemetryPoint,
 } from "@/types/telemetry";
 
 const MAX_POINTS = 30;
+const ANALYSIS_RISK_BUCKET = 15;
+const ANALYSIS_SEVERITY_BUCKET = 0.2;
 
 function clamp(value: number, min = 0, max = 100) {
   return Math.min(max, Math.max(min, value));
@@ -76,63 +78,55 @@ function getTone(value: number, warning: number, critical: number, inverse = fal
   return "healthy";
 }
 
-function createCopilotAssessment(telemetry?: TelemetryPoint): CopilotAssessment {
+function getRiskLevel(telemetry?: TelemetryPoint): RiskLevel {
   if (!telemetry) {
-    return {
-      riskLevel: "Healthy",
-      rootCause: "Awaiting live telemetry from the network simulator.",
-      businessImpact: "No active operational risk has been observed yet.",
-      recommendedAction: "Start the FastAPI backend and keep telemetry polling active.",
-    };
+    return "Healthy";
   }
 
-  const findings: string[] = [];
-  if (telemetry.latency > 80) findings.push("Network congestion detected.");
-  if (telemetry.packet_loss > 10) {
-    findings.push("Packet loss indicates possible link degradation.");
-  }
-  if (telemetry.cpu > 80) {
-    findings.push("Network device CPU utilization is critically high.");
+  if (telemetry.failureProbability >= 0.7 || telemetry.healthScore < 45) {
+    return "Critical";
   }
 
-  const riskLevel: RiskLevel =
-    telemetry.failureProbability >= 0.7 || telemetry.healthScore < 45
-      ? "Critical"
-      : telemetry.failureProbability >= 0.35 || telemetry.healthScore < 70
-        ? "Warning"
-        : "Healthy";
+  if (telemetry.failureProbability >= 0.35 || telemetry.healthScore < 70) {
+    return "Warning";
+  }
 
-  return {
+  return "Healthy";
+}
+
+function getAnalysisSignature(
+  telemetry: TelemetryPoint,
+  riskLevel: RiskLevel,
+  faultActive: boolean,
+) {
+  const riskScore = telemetry.failureProbability * 100;
+  const severityPressure = Math.max(
+    telemetry.failureProbability,
+    (100 - telemetry.healthScore) / 100,
+  );
+
+  return [
+    faultActive,
     riskLevel,
-    rootCause:
-      findings.length > 0
-        ? findings.join(" ")
-        : "Telemetry is within expected operating thresholds.",
-    businessImpact:
-      riskLevel === "Critical"
-        ? "Service degradation could affect enterprise applications and customer-facing traffic."
-        : riskLevel === "Warning"
-          ? "Early degradation signals may impact user experience if left unresolved."
-          : "Network services are operating normally with low disruption risk.",
-    recommendedAction:
-      riskLevel === "Critical"
-        ? "Prioritize incident response, inspect uplinks, and shift traffic from saturated devices."
-        : riskLevel === "Warning"
-          ? "Monitor the affected path, validate interface errors, and prepare failover capacity."
-          : "Continue observing telemetry and maintain current routing policy.",
-  };
+    Math.floor(riskScore / ANALYSIS_RISK_BUCKET),
+    Math.floor(severityPressure / ANALYSIS_SEVERITY_BUCKET),
+  ].join(":");
 }
 
 export default function Home() {
   const [points, setPoints] = useState<TelemetryPoint[]>([]);
   const [isFaultActive, setIsFaultActive] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [copilotAnalysis, setCopilotAnalysis] = useState<CopilotAnalysis>();
+  const [isCopilotLoading, setIsCopilotLoading] = useState(false);
   const [apiStatus, setApiStatus] = useState<"connecting" | "online" | "offline">(
     "connecting",
   );
+  const analysisSignatureRef = useRef<string | undefined>(undefined);
+  const analysisInFlightRef = useRef(false);
 
   const latest = points.at(-1);
-  const assessment = useMemo(() => createCopilotAssessment(latest), [latest]);
+  const riskLevel = getRiskLevel(latest);
 
   const pollTelemetry = useCallback(async () => {
     try {
@@ -153,6 +147,34 @@ export default function Home() {
 
     return () => window.clearInterval(interval);
   }, [pollTelemetry]);
+
+  useEffect(() => {
+    if (!latest || analysisInFlightRef.current) return;
+
+    const signature = getAnalysisSignature(latest, riskLevel, isFaultActive);
+    if (analysisSignatureRef.current === signature) return;
+
+    analysisSignatureRef.current = signature;
+    analysisInFlightRef.current = true;
+    setIsCopilotLoading(true);
+
+    void getCopilotAnalysis({
+      telemetry: latest,
+      riskScore: latest.failureProbability * 100,
+      severity: riskLevel,
+      faultActive: isFaultActive,
+    })
+      .then((analysis) => {
+        setCopilotAnalysis(analysis);
+      })
+      .catch(() => {
+        setCopilotAnalysis((current) => current);
+      })
+      .finally(() => {
+        analysisInFlightRef.current = false;
+        setIsCopilotLoading(false);
+      });
+  }, [latest, riskLevel, isFaultActive]);
 
   const handleInjectFault = async () => {
     setIsBusy(true);
@@ -297,7 +319,12 @@ export default function Home() {
             </section>
           </div>
 
-          <CopilotPanel telemetry={latest} assessment={assessment} />
+          <CopilotPanel
+            telemetry={latest}
+            analysis={copilotAnalysis}
+            riskLevel={riskLevel}
+            isLoading={isCopilotLoading}
+          />
         </div>
       </div>
     </main>

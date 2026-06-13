@@ -14,9 +14,9 @@ export type TelemetryPoint = Telemetry & {
 
 export type RiskLevel = "Healthy" | "Warning" | "Critical";
 
-export type CopilotAssessment = {
-  riskLevel: RiskLevel;
-  rootCause: string;
-  businessImpact: string;
-  recommendedAction: string;
+export type CopilotAnalysis = {
+  root_cause: string;
+  impact: string;
+  recommendation: string;
+  confidence: number;
 };

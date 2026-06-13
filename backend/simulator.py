@@ -129,3 +129,13 @@ def clear_fault():
     with _lock:
         _advance_severity()
         fault_mode = False
+
+
+def get_simulator_state():
+    with _lock:
+        _, severity = _advance_severity()
+
+        return {
+            "fault_mode": fault_mode,
+            "severity": round(severity, 3),
+        }
