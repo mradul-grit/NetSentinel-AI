@@ -89,7 +89,15 @@ def normalize_severity(severity, risk_score, simulator_severity):
     return "Healthy"
 
 
-def build_prompt(telemetry, risk_score, severity):
+def build_prompt(telemetry, risk_score, severity, scenario=None):
+    scenario_context = ""
+    if scenario == "mpls":
+        scenario_context = "\n\nIncident Type: MPLS Congestion - High latency and packet loss on core path."
+    elif scenario == "branch_failure":
+        scenario_context = "\n\nIncident Type: Branch Link Failure - Loss of connectivity to remote branch."
+    elif scenario == "cpu_overload":
+        scenario_context = "\n\nIncident Type: Router CPU Overload - Device CPU is saturated."
+    
     return f"""
 You are a senior network operations engineer.
 
@@ -100,7 +108,7 @@ Packet Loss: {telemetry["packet_loss"]}%
 CPU: {telemetry["cpu"]}%
 Bandwidth: {telemetry["bandwidth"]}%
 Risk Score: {risk_score}%
-Current Severity: {severity}
+Current Severity: {severity}{scenario_context}
 
 Provide:
 1. Most likely root cause
@@ -126,6 +134,7 @@ def analyze_network(
     severity=None,
     simulator_severity=0,
     fault_active=False,
+    scenario=None,
 ):
     global _cached_signature, _cached_analysis
 
@@ -145,10 +154,10 @@ def analyze_network(
     if _cached_signature == signature and _cached_analysis is not None:
         return _cached_analysis
 
-    prompt = build_prompt(telemetry, normalized_risk_score, normalized_severity)
+    prompt = build_prompt(telemetry, normalized_risk_score, normalized_severity, scenario)
     analysis = _generate_with_ollama(prompt)
     if analysis is None:
-        analysis = _fallback_analysis(telemetry, normalized_risk_score, normalized_severity)
+        analysis = _fallback_analysis(telemetry, normalized_risk_score, normalized_severity, scenario)
 
     _cached_signature = signature
     _cached_analysis = analysis
@@ -222,7 +231,7 @@ def _normalize_analysis(raw_analysis):
     )
 
 
-def _fallback_analysis(telemetry, risk_score, severity):
+def _fallback_analysis(telemetry, risk_score, severity, scenario=None):
     findings = []
     if telemetry["latency"] > 80:
         findings.append("high latency")
@@ -233,7 +242,23 @@ def _fallback_analysis(telemetry, risk_score, severity):
     if telemetry["bandwidth"] > 85:
         findings.append("link saturation")
 
-    if severity == "Critical":
+    # Scenario-specific fallback responses
+    if scenario == "mpls":
+        root_cause = "MPLS core path congestion causing elevated latency and packet loss."
+        impact = "Branch office users experiencing slow application response times."
+        recommendation = "Reroute traffic via secondary MPLS tunnel or increase core capacity."
+        confidence = 92
+    elif scenario == "branch_failure":
+        root_cause = "Branch link failure or severe degradation detected."
+        impact = "Complete or partial loss of connectivity to the branch office."
+        recommendation = "Activate backup WAN link and verify branch router status."
+        confidence = 95
+    elif scenario == "cpu_overload":
+        root_cause = "Router CPU utilization critically high, causing packet processing delays."
+        impact = "All traffic through this device experiencing increased latency and drops."
+        recommendation = "Enable load balancing, offload non-critical traffic, or upgrade device."
+        confidence = 93
+    elif severity == "Critical":
         root_cause = (
             "Core path congestion is likely driving elevated latency, packet loss, "
             "and device pressure."
@@ -246,6 +271,7 @@ def _fallback_analysis(telemetry, risk_score, severity):
             "Prioritize the Core Router and Branch B path, validate interface errors, "
             "and shift traffic if capacity is constrained."
         )
+        confidence = 88
     elif severity == "Warning":
         root_cause = (
             "Early degradation is emerging across "
@@ -255,18 +281,14 @@ def _fallback_analysis(telemetry, risk_score, severity):
         recommendation = (
             "Monitor the affected path, check link utilization, and prepare failover capacity."
         )
+        confidence = 82
     else:
         root_cause = "Telemetry is within normal operating thresholds."
         impact = "No material business impact is expected from the current telemetry."
         recommendation = "Continue monitoring and maintain current routing policy."
+        confidence = 78
 
-    confidence = 78
-    if severity == "Warning":
-        confidence = 82
-    elif severity == "Critical":
-        confidence = 88
-
-    if risk_score >= 85 and len(findings) >= 3:
+    if risk_score >= 85 and len(findings) >= 3 and not scenario:
         confidence = 92
 
     return CopilotAnalysisResponse(

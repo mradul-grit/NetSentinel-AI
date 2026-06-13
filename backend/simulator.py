@@ -6,6 +6,7 @@ from threading import Lock
 TRANSITION_SECONDS = 30.0
 
 fault_mode = False
+scenario = None  # Can be "mpls", "branch_failure", "cpu_overload", or None
 
 _severity = 0.0
 _last_updated = time.monotonic()
@@ -71,13 +72,77 @@ def _critical_baseline(seconds):
     }
 
 
+def _scenario_mpls_baseline(seconds):
+    """MPLS Congestion: High latency, moderate packet loss."""
+    bandwidth = 80 + 6 * math.sin(seconds / 12)
+    cpu = 60 + 4 * math.sin(seconds / 14 + 1.0)
+    latency = 95 + 12 * math.sin(seconds / 9 + 1.5)  # High latency
+    packet_loss = 8 + 2 * math.sin(seconds / 11)  # Moderate loss
+
+    return {
+        "latency": _clamp(latency, 80, 130),
+        "packet_loss": _clamp(packet_loss, 5, 15),
+        "cpu": _clamp(cpu, 50, 80),
+        "bandwidth": _clamp(bandwidth, 70, 95),
+    }
+
+
+def _scenario_branch_failure_baseline(seconds):
+    """Branch Link Failure: High packet loss, normal latency."""
+    bandwidth = 20 + 3 * math.sin(seconds / 10)  # Very low bandwidth on failed branch
+    cpu = 45 + 3 * math.sin(seconds / 16 + 0.5)
+    latency = 55 + 5 * math.sin(seconds / 13 + 1.0)  # Moderate latency
+    packet_loss = 18 + 4 * math.sin(seconds / 7 + 1.5)  # Very high packet loss
+
+    return {
+        "latency": _clamp(latency, 40, 80),
+        "packet_loss": _clamp(packet_loss, 12, 25),
+        "cpu": _clamp(cpu, 35, 70),
+        "bandwidth": _clamp(bandwidth, 15, 50),
+    }
+
+
+def _scenario_cpu_overload_baseline(seconds):
+    """Router CPU Overload: High CPU, elevated latency."""
+    bandwidth = 75 + 5 * math.sin(seconds / 14)
+    cpu = 88 + 6 * math.sin(seconds / 8 + 2.0)  # Very high CPU
+    latency = 70 + 8 * math.sin(seconds / 11 + 1.2)  # High latency
+    packet_loss = 6 + 1.5 * math.sin(seconds / 15)  # Minimal loss
+
+    return {
+        "latency": _clamp(latency, 60, 110),
+        "packet_loss": _clamp(packet_loss, 3, 10),
+        "cpu": _clamp(cpu, 80, 98),
+        "bandwidth": _clamp(bandwidth, 65, 90),
+    }
+
+
+
 def generate_telemetry():
     with _lock:
         now, severity = _advance_severity()
         seconds = now - _started_at
 
-        healthy = _healthy_baseline(seconds)
-        critical = _critical_baseline(seconds)
+        # If a scenario is active, use scenario-specific baselines
+        if scenario:
+            if scenario == "mpls":
+                scenario_baseline = _scenario_mpls_baseline(seconds)
+                healthy = _healthy_baseline(seconds)
+                critical = scenario_baseline
+            elif scenario == "branch_failure":
+                scenario_baseline = _scenario_branch_failure_baseline(seconds)
+                healthy = _healthy_baseline(seconds)
+                critical = scenario_baseline
+            elif scenario == "cpu_overload":
+                scenario_baseline = _scenario_cpu_overload_baseline(seconds)
+                healthy = _healthy_baseline(seconds)
+                critical = scenario_baseline
+            else:
+                healthy = _healthy_baseline(seconds)
+                critical = _critical_baseline(seconds)
+        else:
+            healthy = _healthy_baseline(seconds)
+            critical = _critical_baseline(seconds)
 
         bandwidth = _lerp(healthy["bandwidth"], critical["bandwidth"], severity)
         cpu = _lerp(healthy["cpu"], critical["cpu"], severity)
@@ -138,4 +203,34 @@ def get_simulator_state():
         return {
             "fault_mode": fault_mode,
             "severity": round(severity, 3),
+            "scenario": scenario,
         }
+
+
+def start_scenario(scenario_name):
+    """Start a demo scenario."""
+    global scenario, _severity, _started_at, _last_updated
+    
+    with _lock:
+        scenario = scenario_name
+        _severity = 0.0
+        _last_updated = time.monotonic()
+        _started_at = _last_updated
+        # Inject fault automatically to trigger scenario
+        globals()["fault_mode"] = True
+        _advance_severity()
+
+
+def stop_scenario():
+    """Stop the current scenario and reset to normal."""
+    global scenario, fault_mode
+    
+    with _lock:
+        scenario = None
+        fault_mode = False
+        _advance_severity()
+
+
+def get_scenario():
+    """Get the current scenario."""
+    return scenario

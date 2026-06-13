@@ -48,6 +48,20 @@ export function getCopilotAnalysis({
   return request<CopilotAnalysis>(`/copilot-analysis?${params.toString()}`);
 }
 
+export function startScenario(scenario: "mpls" | "branch_failure" | "cpu_overload") {
+  return request<{ status: string; scenario: string }>(`/scenario/${scenario}`, {
+    method: "POST",
+  });
+}
+
+export function stopScenario() {
+  return request<{ status: string }>(`/scenario/stop`, { method: "POST" });
+}
+
+export function getCurrentScenario() {
+  return request<{ scenario: string | null }>(`/scenario`);
+}
+
 export function injectFault() {
   return request<{ status: string }>("/inject-fault", { method: "POST" });
 }

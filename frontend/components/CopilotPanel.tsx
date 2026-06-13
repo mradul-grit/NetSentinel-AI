@@ -87,6 +87,18 @@ export function CopilotPanel({
           <p className="mt-2 text-3xl font-semibold text-zinc-50">
             {displayAnalysis.confidence.toFixed(0)}%
           </p>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={`h-full transition-all duration-300 ${
+                displayAnalysis.confidence >= 85
+                  ? "bg-emerald-500"
+                  : displayAnalysis.confidence >= 70
+                    ? "bg-amber-500"
+                    : "bg-red-500"
+              }`}
+              style={{ width: `${displayAnalysis.confidence}%` }}
+            />
+          </div>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">

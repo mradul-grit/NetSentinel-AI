@@ -10,9 +10,11 @@ import {
   Router,
   SignalHigh,
 } from "lucide-react";
-import { clearFault, getCopilotAnalysis, getTelemetry, injectFault } from "@/lib/api";
+import { clearFault, getCopilotAnalysis, getCurrentScenario, getTelemetry, injectFault, startScenario, stopScenario } from "@/lib/api";
 import { CopilotPanel } from "@/components/CopilotPanel";
 import { ControlPanel } from "@/components/ControlPanel";
+import { DemoPanel } from "@/components/DemoPanel";
+import { IncidentTimeline } from "@/components/IncidentTimeline";
 import { MetricCard } from "@/components/MetricCard";
 import { NetworkTopology } from "@/components/NetworkTopology";
 import { TelemetryChart } from "@/components/TelemetryChart";
@@ -122,6 +124,7 @@ export default function Home() {
   const [apiStatus, setApiStatus] = useState<"connecting" | "online" | "offline">(
     "connecting",
   );
+  const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const analysisSignatureRef = useRef<string | undefined>(undefined);
   const analysisInFlightRef = useRef(false);
 
@@ -191,6 +194,30 @@ export default function Home() {
     setIsBusy(true);
     try {
       await clearFault();
+      setIsFaultActive(false);
+      await pollTelemetry();
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleStartScenario = async (scenario: "mpls" | "branch_failure" | "cpu_overload") => {
+    setIsBusy(true);
+    try {
+      await startScenario(scenario);
+      setActiveScenario(scenario);
+      setIsFaultActive(true);
+      await pollTelemetry();
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleStopScenario = async () => {
+    setIsBusy(true);
+    try {
+      await stopScenario();
+      setActiveScenario(null);
       setIsFaultActive(false);
       await pollTelemetry();
     } finally {
@@ -288,6 +315,15 @@ export default function Home() {
               onInjectFault={handleInjectFault}
               onClearFault={handleClearFault}
             />
+
+            <DemoPanel
+              isBusy={isBusy}
+              onStartScenario={handleStartScenario}
+              onStopScenario={handleStopScenario}
+              activeScenario={activeScenario}
+            />
+
+            <IncidentTimeline currentLevel={riskLevel} />
 
             <NetworkTopology telemetry={latest} />
 

@@ -1,0 +1,13 @@
+warning: in the working copy of 'backend/copilot.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/main.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/simulator.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/app/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/components/CopilotPanel.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/lib/api.ts', LF will be replaced by CRLF the next time Git touches it
+ backend/copilot.py                   | 48 [32m++++++++++++[m[31m-----[m
+ backend/main.py                      | 22 [32m+++++++[m[31m-[m
+ backend/simulator.py                 | 99 [32m+++++++++++++++++++++++++++++++++++[m[31m-[m
+ frontend/app/page.tsx                | 38 [32m+++++++++++++[m[31m-[m
+ frontend/components/CopilotPanel.tsx | 12 [32m+++++[m
+ frontend/lib/api.ts                  | 14 [32m+++++[m
+ 6 files changed, 216 insertions(+), 17 deletions(-)
