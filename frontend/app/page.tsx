@@ -10,15 +10,31 @@ import {
   Router,
   SignalHigh,
 } from "lucide-react";
-import { clearFault, getCopilotAnalysis, getCurrentScenario, getTelemetry, injectFault, startScenario, stopScenario } from "@/lib/api";
+import {
+  clearFault,
+  executeAgentCommand,
+  getAgentOrchestration,
+  getCopilotAnalysis,
+  getTelemetry,
+  injectFault,
+  startScenario,
+  stopScenario,
+} from "@/lib/api";
+import { AgentDetectionFeed } from "@/components/AgentDetectionFeed";
+import { CommandAgentPanel } from "@/components/CommandAgentPanel";
 import { CopilotPanel } from "@/components/CopilotPanel";
 import { ControlPanel } from "@/components/ControlPanel";
 import { DemoPanel } from "@/components/DemoPanel";
+import { ExecutiveMode } from "@/components/ExecutiveMode";
 import { IncidentTimeline } from "@/components/IncidentTimeline";
+import { LiveIncidentFeed } from "@/components/LiveIncidentFeed";
 import { MetricCard } from "@/components/MetricCard";
 import { NetworkTopology } from "@/components/NetworkTopology";
+import { PredictionPanel } from "@/components/PredictionPanel";
 import { TelemetryChart } from "@/components/TelemetryChart";
 import type {
+  AgentCommand,
+  AgentOrchestration,
   CopilotAnalysis,
   RiskLevel,
   Telemetry,
@@ -120,16 +136,23 @@ export default function Home() {
   const [isFaultActive, setIsFaultActive] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [copilotAnalysis, setCopilotAnalysis] = useState<CopilotAnalysis>();
+  const [agentOrchestration, setAgentOrchestration] = useState<AgentOrchestration>();
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
+  const [isAgentLoading, setIsAgentLoading] = useState(false);
   const [apiStatus, setApiStatus] = useState<"connecting" | "online" | "offline">(
     "connecting",
   );
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"Technical" | "Executive">("Technical");
+  const [isCommandBusy, setIsCommandBusy] = useState(false);
+  const [commandStatus, setCommandStatus] = useState<string>();
   const analysisSignatureRef = useRef<string | undefined>(undefined);
   const analysisInFlightRef = useRef(false);
+  const agentInFlightRef = useRef(false);
 
   const latest = points.at(-1);
   const riskLevel = getRiskLevel(latest);
+  const hasAgentData = Boolean(agentOrchestration);
 
   const pollTelemetry = useCallback(async () => {
     try {
@@ -179,6 +202,32 @@ export default function Home() {
       });
   }, [latest, riskLevel, isFaultActive]);
 
+  useEffect(() => {
+    if (!latest || agentInFlightRef.current) return;
+
+    agentInFlightRef.current = true;
+    if (!hasAgentData) {
+      setIsAgentLoading(true);
+    }
+
+    void getAgentOrchestration({
+      telemetry: latest,
+      riskScore: latest.failureProbability * 100,
+      severity: riskLevel,
+      faultActive: isFaultActive,
+    })
+      .then((orchestration) => {
+        setAgentOrchestration(orchestration);
+      })
+      .catch(() => {
+        setAgentOrchestration((current) => current);
+      })
+      .finally(() => {
+        agentInFlightRef.current = false;
+        setIsAgentLoading(false);
+      });
+  }, [latest, riskLevel, isFaultActive, hasAgentData]);
+
   const handleInjectFault = async () => {
     setIsBusy(true);
     try {
@@ -225,6 +274,29 @@ export default function Home() {
     }
   };
 
+  const handleAgentCommand = async (command: AgentCommand) => {
+    setIsCommandBusy(true);
+    setCommandStatus(undefined);
+    try {
+      const result = await executeAgentCommand(command);
+      if (result.status === "AI Action Executed") {
+        const label = result.command_label ?? "Command";
+        setCommandStatus(`AI Action Executed: ${label}`);
+        if (result.telemetry) {
+          const point = toTelemetryPoint(result.telemetry);
+          setPoints((current) => [...current, point].slice(-MAX_POINTS));
+        }
+        await pollTelemetry();
+      } else {
+        setCommandStatus(result.message ?? "Command rejected by local simulator.");
+      }
+    } catch {
+      setCommandStatus("Command Agent unavailable.");
+    } finally {
+      setIsCommandBusy(false);
+    }
+  };
+
   const healthScore = latest?.healthScore ?? 0;
   const failureProbability = latest?.failureProbability ?? 0;
 
@@ -246,6 +318,7 @@ export default function Home() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <ViewToggle value={viewMode} onChange={setViewMode} />
             <StatusPill label="Backend" value={apiStatus} />
             <StatusPill
               label="Fault Mode"
@@ -255,113 +328,135 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="flex min-w-0 flex-col gap-6">
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <MetricCard
-                title="Network Health Score"
-                value={`${healthScore.toFixed(0)}/100`}
-                detail="Composite score from latency, packet loss, and CPU pressure."
-                icon={HeartPulse}
-                tone={getTone(healthScore, 70, 45, true)}
-              >
-                <ProgressBar value={healthScore} tone={getTone(healthScore, 70, 45, true)} />
-              </MetricCard>
-              <MetricCard
-                title="Latency"
-                value={`${latest?.latency.toFixed(0) ?? "--"} ms`}
-                detail="Round-trip delay across monitored network paths."
-                icon={Activity}
-                tone={getTone(latest?.latency ?? 0, 70, 90)}
-              />
-              <MetricCard
-                title="Packet Loss"
-                value={`${latest?.packet_loss.toFixed(0) ?? "--"}%`}
-                detail="Dropped packets detected in the active telemetry stream."
-                icon={Radio}
-                tone={getTone(latest?.packet_loss ?? 0, 5, 10)}
-              />
-              <MetricCard
-                title="CPU Usage"
-                value={`${latest?.cpu.toFixed(0) ?? "--"}%`}
-                detail="Network device compute utilization."
-                icon={Cpu}
-                tone={getTone(latest?.cpu ?? 0, 70, 85)}
-              />
-              <MetricCard
-                title="Bandwidth Usage"
-                value={`${latest?.bandwidth.toFixed(0) ?? "--"}%`}
-                detail="Observed link utilization against available capacity."
-                icon={SignalHigh}
-                tone={getTone(latest?.bandwidth ?? 0, 75, 90)}
-              />
-              <MetricCard
-                title="Failure Probability"
-                value={`${(failureProbability * 100).toFixed(0)}%`}
-                detail="Risk estimate generated locally from live telemetry signals."
-                icon={Gauge}
-                tone={getTone(failureProbability * 100, 35, 70)}
-              >
-                <ProgressBar
-                  value={failureProbability * 100}
-                  tone={getTone(failureProbability * 100, 35, 70)}
+        {viewMode === "Executive" ? (
+          <ExecutiveMode orchestration={agentOrchestration} telemetry={latest} />
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+            <div className="flex min-w-0 flex-col gap-6">
+              <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <MetricCard
+                  title="Network Health Score"
+                  value={`${healthScore.toFixed(0)}/100`}
+                  detail="Composite score from latency, packet loss, and CPU pressure."
+                  icon={HeartPulse}
+                  tone={getTone(healthScore, 70, 45, true)}
+                >
+                  <ProgressBar value={healthScore} tone={getTone(healthScore, 70, 45, true)} />
+                </MetricCard>
+                <MetricCard
+                  title="Latency"
+                  value={`${latest?.latency.toFixed(0) ?? "--"} ms`}
+                  detail="Round-trip delay across monitored network paths."
+                  icon={Activity}
+                  tone={getTone(latest?.latency ?? 0, 70, 90)}
                 />
-              </MetricCard>
-            </section>
+                <MetricCard
+                  title="Packet Loss"
+                  value={`${latest?.packet_loss.toFixed(0) ?? "--"}%`}
+                  detail="Dropped packets detected in the active telemetry stream."
+                  icon={Radio}
+                  tone={getTone(latest?.packet_loss ?? 0, 5, 10)}
+                />
+                <MetricCard
+                  title="CPU Usage"
+                  value={`${latest?.cpu.toFixed(0) ?? "--"}%`}
+                  detail="Network device compute utilization."
+                  icon={Cpu}
+                  tone={getTone(latest?.cpu ?? 0, 70, 85)}
+                />
+                <MetricCard
+                  title="Bandwidth Usage"
+                  value={`${latest?.bandwidth.toFixed(0) ?? "--"}%`}
+                  detail="Observed link utilization against available capacity."
+                  icon={SignalHigh}
+                  tone={getTone(latest?.bandwidth ?? 0, 75, 90)}
+                />
+                <MetricCard
+                  title="Failure Probability"
+                  value={`${(failureProbability * 100).toFixed(0)}%`}
+                  detail="Risk estimate generated locally from live telemetry signals."
+                  icon={Gauge}
+                  tone={getTone(failureProbability * 100, 35, 70)}
+                >
+                  <ProgressBar
+                    value={failureProbability * 100}
+                    tone={getTone(failureProbability * 100, 35, 70)}
+                  />
+                </MetricCard>
+              </section>
 
-            <ControlPanel
-              isFaultActive={isFaultActive}
-              isBusy={isBusy}
-              onInjectFault={handleInjectFault}
-              onClearFault={handleClearFault}
-            />
-
-            <DemoPanel
-              isBusy={isBusy}
-              onStartScenario={handleStartScenario}
-              onStopScenario={handleStopScenario}
-              activeScenario={activeScenario}
-            />
-
-            <IncidentTimeline currentLevel={riskLevel} />
-
-            <NetworkTopology telemetry={latest} />
-
-            <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <TelemetryChart
-                title="Latency"
-                dataKey="latency"
-                unit="ms"
-                data={points}
-                color="#22d3ee"
-                domain={[0, 130]}
+              <AgentDetectionFeed
+                orchestration={agentOrchestration}
+                riskLevel={riskLevel}
+                isLoading={isAgentLoading}
               />
-              <TelemetryChart
-                title="Packet Loss"
-                dataKey="packet_loss"
-                unit="%"
-                data={points}
-                color="#f59e0b"
-                domain={[0, 30]}
+
+              <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <ControlPanel
+                  isFaultActive={isFaultActive}
+                  isBusy={isBusy}
+                  onInjectFault={handleInjectFault}
+                  onClearFault={handleClearFault}
+                />
+                <CommandAgentPanel
+                  isBusy={isCommandBusy || isBusy}
+                  actionStatus={commandStatus}
+                  onExecute={handleAgentCommand}
+                />
+              </section>
+
+              <DemoPanel
+                isBusy={isBusy}
+                onStartScenario={handleStartScenario}
+                onStopScenario={handleStopScenario}
+                activeScenario={activeScenario}
               />
-              <TelemetryChart
-                title="CPU"
-                dataKey="cpu"
-                unit="%"
-                data={points}
-                color="#ef4444"
-                domain={[0, 100]}
+
+              <IncidentTimeline currentLevel={riskLevel} />
+
+              <NetworkTopology telemetry={latest} />
+
+              <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <TelemetryChart
+                  title="Latency"
+                  dataKey="latency"
+                  unit="ms"
+                  data={points}
+                  color="#22d3ee"
+                  domain={[0, 130]}
+                />
+                <TelemetryChart
+                  title="Packet Loss"
+                  dataKey="packet_loss"
+                  unit="%"
+                  data={points}
+                  color="#f59e0b"
+                  domain={[0, 30]}
+                />
+                <TelemetryChart
+                  title="CPU"
+                  dataKey="cpu"
+                  unit="%"
+                  data={points}
+                  color="#ef4444"
+                  domain={[0, 100]}
+                />
+              </section>
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-6 xl:self-start">
+              <CopilotPanel
+                telemetry={latest}
+                analysis={copilotAnalysis}
+                orchestration={agentOrchestration}
+                riskLevel={riskLevel}
+                isLoading={isCopilotLoading || isAgentLoading}
               />
-            </section>
+              <PredictionPanel prediction={agentOrchestration?.prediction} />
+              <LiveIncidentFeed events={agentOrchestration?.incident_feed} />
+            </div>
           </div>
-
-          <CopilotPanel
-            telemetry={latest}
-            analysis={copilotAnalysis}
-            riskLevel={riskLevel}
-            isLoading={isCopilotLoading}
-          />
-        </div>
+        )}
       </div>
     </main>
   );
@@ -381,6 +476,37 @@ function ProgressBar({ value, tone }: { value: number; tone: string }) {
         className={`h-full rounded-full ${color} transition-all duration-500`}
         style={{ width: `${clamp(value)}%` }}
       />
+    </div>
+  );
+}
+
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: "Technical" | "Executive";
+  onChange: (value: "Technical" | "Executive") => void;
+}) {
+  return (
+    <div className="inline-flex h-10 overflow-hidden rounded-md border border-white/10 bg-white/[0.04] p-1">
+      {(["Technical", "Executive"] as const).map((mode) => {
+        const isActive = value === mode;
+
+        return (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onChange(mode)}
+            className={`rounded px-3 text-sm font-semibold transition ${
+              isActive
+                ? "bg-cyan-400/20 text-cyan-100"
+                : "text-zinc-400 hover:text-zinc-100"
+            }`}
+          >
+            {mode} View
+          </button>
+        );
+      })}
     </div>
   );
 }

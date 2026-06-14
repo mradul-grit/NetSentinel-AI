@@ -1,7 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from copilot import CopilotAnalysisResponse, analyze_network, get_selected_model, select_available_model
-from simulator import clear_fault, generate_telemetry, get_simulator_state, inject_fault, start_scenario, stop_scenario, get_scenario
+from copilot import (
+    AgentOrchestrationResponse,
+    CopilotAnalysisResponse,
+    analyze_network,
+    get_selected_model,
+    orchestrate_agents,
+    record_command_event,
+    select_available_model,
+)
+from simulator import (
+    clear_fault,
+    execute_ai_action,
+    generate_telemetry,
+    get_scenario,
+    get_simulator_state,
+    inject_fault,
+    start_scenario,
+    stop_scenario,
+)
 import uvicorn
 
 app = FastAPI(title="NetSentinel-AI API")
@@ -66,6 +83,60 @@ def copilot_analysis(
         fault_active=simulator_state["fault_mode"] if fault_active is None else fault_active,
         scenario=simulator_state.get("scenario"),
     )
+
+
+@app.get("/agent-orchestration", response_model=AgentOrchestrationResponse)
+def agent_orchestration(
+    latency: float | None = None,
+    packet_loss: float | None = None,
+    cpu: float | None = None,
+    bandwidth: float | None = None,
+    risk_score: float | None = None,
+    severity: str | None = None,
+    fault_active: bool | None = None,
+):
+    telemetry_data = (
+        {
+            "latency": latency,
+            "packet_loss": packet_loss,
+            "cpu": cpu,
+            "bandwidth": bandwidth,
+        }
+        if None not in (latency, packet_loss, cpu, bandwidth)
+        else generate_telemetry()
+    )
+    simulator_state = get_simulator_state()
+
+    return orchestrate_agents(
+        telemetry_data,
+        risk_score=risk_score,
+        severity=severity,
+        simulator_severity=simulator_state["severity"],
+        fault_active=simulator_state["fault_mode"] if fault_active is None else fault_active,
+        scenario=simulator_state.get("scenario"),
+        command_state=simulator_state,
+    )
+
+
+@app.post("/agent-command/{command_name}")
+def execute_agent_command(command_name: str):
+    result = execute_ai_action(command_name)
+    if result is None:
+        return {
+            "status": "error",
+            "message": "Invalid command",
+            "allowed_commands": [
+                "reroute_traffic",
+                "restart_router",
+                "increase_capacity",
+                "failover_link",
+            ],
+        }
+
+    record_command_event(result["command_label"])
+    result["telemetry"] = generate_telemetry()
+    return result
+
 
 @app.post("/inject-fault")
 def fault():

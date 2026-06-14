@@ -1,9 +1,15 @@
 import { BrainCircuit, CircleAlert, CircleCheck, RadioTower } from "lucide-react";
-import type { CopilotAnalysis, RiskLevel, TelemetryPoint } from "@/types/telemetry";
+import type {
+  AgentOrchestration,
+  CopilotAnalysis,
+  RiskLevel,
+  TelemetryPoint,
+} from "@/types/telemetry";
 
 type CopilotPanelProps = {
   telemetry?: TelemetryPoint;
   analysis?: CopilotAnalysis;
+  orchestration?: AgentOrchestration;
   riskLevel: RiskLevel;
   isLoading: boolean;
 };
@@ -23,12 +29,12 @@ const riskIcons: Record<RiskLevel, typeof CircleCheck> = {
 export function CopilotPanel({
   telemetry,
   analysis,
+  orchestration,
   riskLevel,
   isLoading,
 }: CopilotPanelProps) {
   const RiskIcon = riskIcons[riskLevel];
   const failureProbability = telemetry?.failureProbability ?? 0;
-  const costSaved = failureProbability * 2000;
   const displayAnalysis = analysis ?? {
     root_cause: telemetry
       ? "AI analysis is being prepared from the latest telemetry."
@@ -41,16 +47,24 @@ export function CopilotPanel({
       : "Start the FastAPI backend and keep telemetry polling active.",
     confidence: 0,
   };
+  const rootCause = orchestration?.root_cause.primary_cause ?? displayAnalysis.root_cause;
+  const alternatives = orchestration?.root_cause.alternative_causes ?? [];
+  const businessImpact = orchestration?.impact.business_impact ?? displayAnalysis.impact;
+  const actionPlan = orchestration?.remediation.action_plan;
+  const recommendation =
+    orchestration?.remediation.recommended_decision ?? displayAnalysis.recommendation;
+  const confidence = orchestration?.root_cause.confidence ?? displayAnalysis.confidence;
+  const costSaved = orchestration?.executive.cost_saved ?? failureProbability * 2000;
 
   return (
-    <aside className="rounded-lg border border-cyan-400/15 bg-zinc-950/90 p-5 shadow-2xl shadow-cyan-950/20 xl:sticky xl:top-6">
+    <aside className="rounded-lg border border-cyan-400/15 bg-zinc-950/90 p-5 shadow-2xl shadow-cyan-950/20">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-300/70">
             AI Network Operations Assistant
           </p>
           <h2 className="mt-2 text-xl font-semibold text-zinc-50">
-            Reliability Assessment
+            Copilot Panel
           </h2>
         </div>
         <div className="rounded-md border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-200">
@@ -74,9 +88,41 @@ export function CopilotPanel({
       </div>
 
       <div className="mt-5 space-y-4">
-        <Insight label="Root Cause" value={displayAnalysis.root_cause} />
-        <Insight label="Business Impact" value={displayAnalysis.impact} />
-        <Insight label="Recommendation" value={displayAnalysis.recommendation} />
+        <Insight label="Primary Cause" value={rootCause} />
+        {alternatives.length ? (
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
+              Alternative Causes
+            </p>
+            <ul className="mt-2 space-y-2">
+              {alternatives.map((cause) => (
+                <li key={cause} className="flex gap-2 text-sm leading-5 text-zinc-300">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300" />
+                  {cause}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <Insight label="Business Impact" value={businessImpact} />
+        <Insight label="Recommended Decision" value={recommendation} />
+        {actionPlan?.length ? (
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
+              Action Plan
+            </p>
+            <ol className="mt-2 space-y-2">
+              {actionPlan.map((step, index) => (
+                <li key={step} className="flex gap-2 text-sm leading-5 text-zinc-300">
+                  <span className="font-mono text-xs text-cyan-300">
+                    {index + 1}.
+                  </span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-3">
@@ -85,18 +131,18 @@ export function CopilotPanel({
             Assistant Confidence
           </p>
           <p className="mt-2 text-3xl font-semibold text-zinc-50">
-            {displayAnalysis.confidence.toFixed(0)}%
+            {confidence.toFixed(0)}%
           </p>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
             <div
               className={`h-full transition-all duration-300 ${
-                displayAnalysis.confidence >= 85
+                confidence >= 85
                   ? "bg-emerald-500"
-                  : displayAnalysis.confidence >= 70
+                  : confidence >= 70
                     ? "bg-amber-500"
                     : "bg-red-500"
               }`}
-              style={{ width: `${displayAnalysis.confidence}%` }}
+              style={{ width: `${confidence}%` }}
             />
           </div>
         </div>

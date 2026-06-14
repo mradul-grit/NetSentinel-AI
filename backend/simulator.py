@@ -4,6 +4,7 @@ from threading import Lock
 
 
 TRANSITION_SECONDS = 30.0
+COMMAND_EFFECT_SECONDS = 55.0
 
 fault_mode = False
 scenario = None  # Can be "mpls", "branch_failure", "cpu_overload", or None
@@ -11,7 +12,40 @@ scenario = None  # Can be "mpls", "branch_failure", "cpu_overload", or None
 _severity = 0.0
 _last_updated = time.monotonic()
 _started_at = _last_updated
+_last_command = None
+_last_command_started_at = None
 _lock = Lock()
+
+COMMAND_PROFILES = {
+    "reroute_traffic": {
+        "label": "Reroute Traffic",
+        "latency_delta": -24,
+        "packet_loss_delta": -4.5,
+        "cpu_delta": 2,
+        "bandwidth_delta": -10,
+    },
+    "restart_router": {
+        "label": "Restart Router",
+        "latency_delta": -10,
+        "packet_loss_delta": -2.5,
+        "cpu_delta": -24,
+        "bandwidth_delta": 0,
+    },
+    "increase_capacity": {
+        "label": "Increase Capacity",
+        "latency_delta": -15,
+        "packet_loss_delta": -3,
+        "cpu_delta": -3,
+        "bandwidth_delta": -18,
+    },
+    "failover_link": {
+        "label": "Failover Link",
+        "latency_delta": -20,
+        "packet_loss_delta": -7,
+        "cpu_delta": 1,
+        "bandwidth_delta": -8,
+    },
+}
 
 
 def _clamp(value, minimum, maximum):
@@ -25,6 +59,45 @@ def _lerp(start, end, amount):
 def _smoothstep(value):
     value = _clamp(value, 0.0, 1.0)
     return value * value * (3.0 - 2.0 * value)
+
+
+def _command_strength(now):
+    if _last_command is None or _last_command_started_at is None:
+        return 0.0
+
+    elapsed = max(0.0, now - _last_command_started_at)
+    remaining = 1.0 - elapsed / COMMAND_EFFECT_SECONDS
+    return _smoothstep(_clamp(remaining, 0.0, 1.0))
+
+
+def _apply_command_effect(telemetry, now):
+    strength = _command_strength(now)
+    if strength <= 0:
+        return telemetry
+
+    profile = COMMAND_PROFILES[_last_command]
+    return {
+        "latency": _clamp(
+            telemetry["latency"] + profile["latency_delta"] * strength,
+            20,
+            120,
+        ),
+        "packet_loss": _clamp(
+            telemetry["packet_loss"] + profile["packet_loss_delta"] * strength,
+            0,
+            25,
+        ),
+        "cpu": _clamp(
+            telemetry["cpu"] + profile["cpu_delta"] * strength,
+            15,
+            95,
+        ),
+        "bandwidth": _clamp(
+            telemetry["bandwidth"] + profile["bandwidth_delta"] * strength,
+            20,
+            100,
+        ),
+    }
 
 
 def _advance_severity():
@@ -172,6 +245,8 @@ def generate_telemetry():
             telemetry["cpu"] = _clamp(telemetry["cpu"], 70, 95)
             telemetry["bandwidth"] = _clamp(telemetry["bandwidth"], 85, 100)
 
+        telemetry = _apply_command_effect(telemetry, now)
+
         return {
             "latency": round(telemetry["latency"], 1),
             "packet_loss": round(telemetry["packet_loss"], 2),
@@ -198,12 +273,16 @@ def clear_fault():
 
 def get_simulator_state():
     with _lock:
-        _, severity = _advance_severity()
+        now, severity = _advance_severity()
+        command_strength = _command_strength(now)
 
         return {
             "fault_mode": fault_mode,
             "severity": round(severity, 3),
             "scenario": scenario,
+            "last_command": _last_command,
+            "last_command_label": COMMAND_PROFILES[_last_command]["label"] if _last_command else None,
+            "command_strength": round(command_strength, 3),
         }
 
 
@@ -234,3 +313,24 @@ def stop_scenario():
 def get_scenario():
     """Get the current scenario."""
     return scenario
+
+
+def execute_ai_action(command_name):
+    """Apply a temporary local simulation effect for the command agent."""
+    global _last_command, _last_command_started_at
+
+    if command_name not in COMMAND_PROFILES:
+        return None
+
+    with _lock:
+        _advance_severity()
+        _last_command = command_name
+        _last_command_started_at = time.monotonic()
+        profile = COMMAND_PROFILES[command_name]
+
+        return {
+            "status": "AI Action Executed",
+            "command": command_name,
+            "command_label": profile["label"],
+            "effect_seconds": COMMAND_EFFECT_SECONDS,
+        }

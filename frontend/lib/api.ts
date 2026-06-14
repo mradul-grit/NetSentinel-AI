@@ -1,4 +1,12 @@
-import type { CopilotAnalysis, RiskLevel, Telemetry, TelemetryPoint } from "@/types/telemetry";
+import type {
+  AgentCommand,
+  AgentCommandResponse,
+  AgentOrchestration,
+  CopilotAnalysis,
+  RiskLevel,
+  Telemetry,
+  TelemetryPoint,
+} from "@/types/telemetry";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -46,6 +54,36 @@ export function getCopilotAnalysis({
   });
 
   return request<CopilotAnalysis>(`/copilot-analysis?${params.toString()}`);
+}
+
+export function getAgentOrchestration({
+  telemetry,
+  riskScore,
+  severity,
+  faultActive,
+}: {
+  telemetry: TelemetryPoint;
+  riskScore: number;
+  severity: RiskLevel;
+  faultActive: boolean;
+}) {
+  const params = new URLSearchParams({
+    latency: telemetry.latency.toFixed(1),
+    packet_loss: telemetry.packet_loss.toFixed(2),
+    cpu: telemetry.cpu.toFixed(1),
+    bandwidth: telemetry.bandwidth.toFixed(1),
+    risk_score: riskScore.toFixed(0),
+    severity,
+    fault_active: String(faultActive),
+  });
+
+  return request<AgentOrchestration>(`/agent-orchestration?${params.toString()}`);
+}
+
+export function executeAgentCommand(command: AgentCommand) {
+  return request<AgentCommandResponse>(`/agent-command/${command}`, {
+    method: "POST",
+  });
 }
 
 export function startScenario(scenario: "mpls" | "branch_failure" | "cpu_overload") {
