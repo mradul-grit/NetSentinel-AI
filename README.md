@@ -1,227 +1,364 @@
-<<<<<<< HEAD
-# NetSentinel-AI
+# 🚀 NetSentinel AI
 
+### Autonomous Multi-Agent Network Operations Copilot
 
-# NetSentinel AI
+NetSentinel AI transforms enterprise network operations from reactive monitoring into autonomous AI-driven incident management.
 
-AI-powered predictive network monitoring system.
+Instead of simply displaying dashboards, NetSentinel deploys specialized AI agents that detect anomalies, investigate root causes, predict failures, assess business impact, recommend remediation, and execute recovery actions.
 
-## Features
+---
 
-- Real-time telemetry dashboard
-- Anomaly detection
-- Fault injection simulation
-- AI operations copilot
-- Live monitoring interface
+# Problem
 
-## Tech Stack
+Modern enterprise networks generate millions of telemetry events.
 
-Frontend:
-- Next.js
-- TypeScript
+Traditional monitoring tools:
 
-Backend:
-- FastAPI
-- Python
-- Scikit-learn
+❌ Show alerts
 
-## Run Locally
+❌ Show graphs
 
-### Backend
+❌ Require human investigation
 
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+❌ Require manual remediation
 
-### Frontend
+This creates:
 
-cd frontend
-npm install
-npm run dev
+* Long Mean Time To Resolution (MTTR)
+* Expensive outages
+* Operational overload
 
-Frontend:
-http://localhost:3000
+---
 
-Backend:
-http://localhost:8000
+# Solution
 
-Swagger:
-http://localhost:8000/docs
-=======
-# NetSentinel AI
+NetSentinel AI acts as an autonomous Network Operations Center.
 
-AI Reliability Copilot for Enterprise Networks.
+```mermaid
+flowchart LR
 
-NetSentinel AI is a hackathon-ready network operations dashboard that monitors live telemetry, detects degraded conditions, explains likely root causes, and estimates the business impact of preventing a network failure.
+A[Live Telemetry]
+--> B[Detection Agent]
 
-## What It Shows
+B --> C[Root Cause Agent]
 
-- Live enterprise network telemetry from a FastAPI simulator
-- Network health score based on latency, packet loss, and CPU utilization
-- Failure probability generated from telemetry risk signals
-- Recharts-powered live charts for latency, packet loss, and CPU
-- Fault injection and recovery controls
-- AI Copilot panel with local incident explanations
-- Estimated downtime prevented and cost saved
+C --> D[Impact Agent]
 
-## Architecture
+D --> E[Prediction Agent]
 
-```text
-NetSentinel-AI/
-├─ backend/
-│  ├─ main.py            FastAPI app and API routes
-│  ├─ simulator.py       Live telemetry and fault simulation
-│  ├─ model.py           Isolation Forest anomaly model
-│  └─ requirements.txt
-└─ frontend/
-   ├─ app/               Next.js dashboard route and global styles
-   ├─ components/        Dashboard cards, charts, copilot, controls
-   ├─ lib/api.ts         Backend API client
-   └─ types/             Shared TypeScript telemetry types
+E --> F[Remediation Agent]
+
+F --> G[Command Agent]
+
+G --> H[Network Recovery]
 ```
 
-## Tech Stack
+---
 
-- Backend: FastAPI, Python, scikit-learn
-- Frontend: Next.js 15, TypeScript, Tailwind CSS
-- Visualization: Recharts
-- UI style: Dark enterprise SOC dashboard
+# Multi-Agent Architecture
 
-## Backend API
+```mermaid
+graph TD
 
-The frontend expects the backend to run at `http://127.0.0.1:8000`.
+T[Telemetry Stream]
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/` | API welcome response |
-| GET | `/health` | Health check |
-| GET | `/telemetry` | Current telemetry sample |
-| POST | `/inject-fault` | Simulate network degradation |
-| POST | `/clear-fault` | Return simulator to normal mode |
+T --> D1[Detection Agent]
+T --> D2[Prediction Agent]
 
-Telemetry shape:
+D1 --> RC[Root Cause Agent]
 
-```json
-{
-  "latency": 35,
-  "packet_loss": 3,
-  "cpu": 55,
-  "bandwidth": 62
-}
+RC --> IA[Impact Agent]
+
+IA --> RA[Remediation Agent]
+
+RA --> CA[Command Agent]
+
+CA --> REC[Recovery]
+
+REC --> T
 ```
 
-## Run Locally
+---
 
-### 1. Start Backend
+# AI Agents
 
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+## Detection Agent
+
+Analyzes:
+
+* Latency
+* Packet Loss
+* CPU
+* Bandwidth
+
+Outputs:
+
+* Incident Type
+* Confidence
+* Severity
+* Trend
+
+---
+
+## Root Cause Agent
+
+Determines:
+
+* Primary Cause
+* Alternative Causes
+* Incident Severity
+
+Examples:
+
+* MPLS Congestion
+* Branch Failure
+* Router CPU Overload
+
+---
+
+## Impact Agent
+
+Converts technical failures into business language.
+
+Examples:
+
+### Banking
+
+* ATM disruption
+* Online banking slowdown
+
+### Healthcare
+
+* EMR latency
+
+### Retail
+
+* POS transaction failures
+
+---
+
+## Prediction Agent
+
+Forecasts future risk.
+
+Outputs:
+
+* Current Risk
+* 15 Minute Risk
+* 30 Minute Risk
+* 60 Minute Risk
+
+---
+
+## Command Agent
+
+Simulates autonomous operations.
+
+Actions:
+
+* Reroute Traffic
+* Restart Router
+* Failover Link
+* Increase Capacity
+
+---
+
+# Enterprise Topology
+
+```mermaid
+graph LR
+
+A[Branch A]
+--> R[Core Router]
+
+B[Branch B]
+--> R
+
+R --> D[Data Center]
+
+D --> C[Applications]
+
+C --> U[Users]
 ```
 
-Backend URL:
+---
 
-```text
-http://127.0.0.1:8000
+# Incident Response Workflow
+
+```mermaid
+sequenceDiagram
+
+participant Telemetry
+participant Detection
+participant RootCause
+participant Impact
+participant Prediction
+participant Command
+
+Telemetry->>Detection: Detect anomaly
+
+Detection->>RootCause: Investigate
+
+RootCause->>Impact: Assess business impact
+
+Impact->>Prediction: Estimate future risk
+
+Prediction->>Command: Recommend action
+
+Command->>Telemetry: Execute recovery
+
+Telemetry-->>Detection: Confirm recovery
 ```
 
-### 2. Start Frontend
+---
 
-Open a second terminal:
+# Demo Scenarios
 
-```bash
-cd frontend
-npm install
-npm run dev
+## MPLS Congestion
+
+High latency on core links.
+
+### AI Response
+
+* Detects congestion
+* Predicts increasing risk
+* Recommends rerouting
+* Executes traffic shift
+
+---
+
+## Branch Link Failure
+
+Loss of remote connectivity.
+
+### AI Response
+
+* Detects outage
+* Assesses affected users
+* Recommends failover
+* Restores service
+
+---
+
+## Router CPU Overload
+
+Critical device saturation.
+
+### AI Response
+
+* Detects processing bottleneck
+* Predicts outage risk
+* Recommends restart
+* Stabilizes telemetry
+
+---
+
+# Executive Mode
+
+Converts network telemetry into business outcomes.
+
+Displays:
+
+* Downtime Prevented
+* Cost Saved
+* Revenue Risk
+* Users Impacted
+* Recommended Decisions
+
+---
+
+# System Architecture
+
+```mermaid
+flowchart TB
+
+subgraph Frontend
+
+UI[Next.js Dashboard]
+
+end
+
+subgraph Backend
+
+SIM[Telemetry Simulator]
+
+API[FastAPI]
+
+AGENTS[AI Agent Orchestrator]
+
+end
+
+subgraph AI
+
+OLLAMA[Local Ollama LLM]
+
+end
+
+UI <--> API
+
+API <--> SIM
+
+API <--> AGENTS
+
+AGENTS <--> OLLAMA
 ```
 
-Frontend URL:
+---
 
-```text
-http://127.0.0.1:3000
+# Technology Stack
+
+| Layer        | Technology       |
+| ------------ | ---------------- |
+| Frontend     | Next.js          |
+| UI           | React + Tailwind |
+| Backend      | FastAPI          |
+| Language     | Python           |
+| AI Runtime   | Ollama           |
+| Models       | Llama 3          |
+| Architecture | Multi-Agent      |
+| Deployment   | Local First      |
+
+---
+
+# Demo Flow
+
+```mermaid
+flowchart LR
+
+A[Healthy Network]
+--> B[Inject Failure]
+
+B --> C[Detection Agent]
+
+C --> D[Root Cause Agent]
+
+D --> E[Impact Agent]
+
+E --> F[Prediction Agent]
+
+F --> G[Command Agent]
+
+G --> H[Recovery]
+
+H --> I[Executive Report]
 ```
 
-If port `3000` is busy:
+---
 
-```bash
-npm run dev -- --port 3001
-```
+# Vision
 
-## Frontend Environment
+Today:
 
-The frontend defaults to:
+Monitoring Networks
 
-```text
-http://127.0.0.1:8000
-```
+↓
 
-To override it, create `frontend/.env.local`:
+Tomorrow:
 
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
-```
+Operating Networks
 
-## Risk Logic
+↓
 
-Health score:
+Future:
 
-```text
-healthScore = 100 - latency * 0.3 - packet_loss * 2 - cpu * 0.2
-```
-
-The score is clamped between `0` and `100`.
-
-Failure probability increases as latency, packet loss, CPU usage, and bandwidth utilization rise.
-
-Business impact:
-
-```text
-costSaved = failureProbability * 2000
-downtimePrevented = failureProbability * 0.5
-```
-
-## Copilot Rules
-
-The AI Copilot generates local explanations from telemetry:
-
-| Condition | Explanation |
-| --- | --- |
-| `latency > 80` | Network congestion detected. |
-| `packet_loss > 10` | Packet loss indicates possible link degradation. |
-| `cpu > 80` | Network device CPU utilization is critically high. |
-
-It also displays:
-
-- Risk level
-- Root cause
-- Business impact
-- Recommended action
-
-## Demo Flow
-
-1. Start the FastAPI backend.
-2. Start the Next.js frontend.
-3. Open the dashboard and show live telemetry updating every second.
-4. Click `Inject Failure`.
-5. Watch latency, packet loss, CPU, and failure probability rise.
-6. Explain the Copilot root-cause analysis and business impact.
-7. Click `Clear Failure`.
-8. Show health score recovery and risk reduction.
-
-## Quality Checks
-
-Run these before presenting:
-
-```bash
-cd frontend
-npm run lint
-npm run build
-```
-
-## Hackathon Pitch
-
-Enterprise networks fail silently before they fail visibly. NetSentinel AI turns raw telemetry into an operations-center experience: live health scoring, fault simulation, business impact, and an AI copilot that explains what is going wrong before downtime happens.
->>>>>>> 827d631 (verify project setup and demo flow)
+Autonomous AI Network Operations Centers
